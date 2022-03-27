@@ -1,5 +1,12 @@
-import { IsEnum, IsNumber, IsOptional, Matches } from 'class-validator';
-import { MONGO_URI_PATTERN } from '../constants/regexs';
+import {
+  IsDefined,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+// import { MONGO_URI_PATTERN } from '../constants/regexs';
 import { Environment } from '../typings/enums/env.enum';
 
 export class EnvironmentVariables {
@@ -11,7 +18,9 @@ export class EnvironmentVariables {
   @IsOptional()
   PORT: number;
 
-  @Matches(MONGO_URI_PATTERN)
+  @IsDefined()
+  @IsString()
+  @IsNotEmpty()
   MONGO_URI: string;
 
   @IsNumber()
