@@ -1,7 +1,8 @@
-import { Inject, ParseUUIDPipe } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -17,21 +18,25 @@ import calculateWinner from './game.logic';
 import { GameService } from './game.service';
 import { SignEnum } from './typings/enums/sign.enum';
 
+type Rooms = Map<Socket, { code: string; playerType: 'maker' | 'joiner' }>;
+
 @UseValidation()
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
-export class GameGateway {
+export class GameGateway implements OnGatewayDisconnect {
   constructor(@Inject(GameService) private gameService: GameService) {}
 
   @WebSocketServer()
   server: Server;
 
+  rooms: Rooms = new Map();
+
   @SubscribeMessage('check')
   async check(
-    @MessageBody('code', ParseUUIDPipe) code: string,
+    @MessageBody() { code }: { code: string },
   ): Promise<WsResponse<GameDocument>> {
     const game = await this.gameService.findOne({ code });
 
@@ -47,7 +52,9 @@ export class GameGateway {
     @ConnectedSocket() client: Socket,
   ): Promise<WsResponse<GameDocument>> {
     const game = await this.gameService.create(data);
+
     client.join(game.code);
+    this.rooms.set(client, { code: game.code, playerType: 'maker' });
     return {
       event: 'create-complete',
       data: game,
@@ -59,7 +66,7 @@ export class GameGateway {
     @MessageBody() { code, ...body }: JoinGameDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const { data } = await this.check(code);
+    const { data } = await this.check({ code });
 
     if (!data) {
       throw new WsException({
@@ -85,6 +92,7 @@ export class GameGateway {
     });
 
     client.join(game.code);
+    this.rooms.set(client, { code: game.code, playerType: 'joiner' });
 
     client.broadcast.to(game.code).emit('player-joined', game);
 
@@ -105,7 +113,9 @@ export class GameGateway {
     }: { cells: string[]; idx: number; xIsNext: boolean; code: string },
     @ConnectedSocket() client: Socket,
   ) {
-    cells[idx] = xIsNext ? SignEnum.X : SignEnum.O;
+    if (!cells[idx]) {
+      cells[idx] = xIsNext ? SignEnum.X : SignEnum.O;
+    }
 
     const {
       winner,
@@ -119,11 +129,46 @@ export class GameGateway {
       xIsNext: !xIsNext,
     };
 
-    client.to(code).emit('move-complete', result);
+    client.broadcast.to(code).emit('move-complete', result);
+
+    console.log(this.rooms.values());
 
     return {
       event: 'move-complete',
       data: result,
     };
+  }
+
+  @SubscribeMessage('restart')
+  async restart(@MessageBody() { code }, @ConnectedSocket() client: Socket) {
+    console.log(code, '\n', client.id);
+
+    client.broadcast.to(code).emit('restart-made');
+  }
+
+  async handleDisconnect(client: Socket) {
+    const playerRoom = this.rooms.get(client);
+    if (playerRoom.playerType === 'joiner') {
+      const game = await this.gameService.update({
+        code: playerRoom.code,
+        joiner: null,
+      });
+      client.broadcast.to(game.code).emit('opponent-left', game);
+    } else if (playerRoom.playerType === 'maker') {
+      const game = await this.gameService.findOne({
+        code: playerRoom.code,
+      });
+      if (!game.joiner) {
+        await game.remove();
+      } else if (game.joiner) {
+        const updatedGame = await this.gameService.update({
+          code: game.code,
+          maker: game.joiner,
+          joiner: null,
+        });
+        client.broadcast.to(game.code).emit('opponent-left', updatedGame);
+      }
+    }
+    this.rooms.delete(client);
   }
 }
