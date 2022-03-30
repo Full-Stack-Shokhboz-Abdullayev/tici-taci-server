@@ -172,7 +172,7 @@ export class GameGateway implements OnGatewayDisconnect {
             maker: game.joiner,
             joiner: null,
           }),
-          this.roomService.set(client.id, {
+          this.roomService.updateByPlayerType('joiner', game.code, {
             playerType: 'maker',
           }),
         ]);

@@ -28,9 +28,24 @@ export class RoomService {
           this.configService.get('GAME_DURATION'),
         ),
       },
-      { upsert: true },
+      { upsert: true, new: true, runValidators: true },
     );
   }
+
+  updateByPlayerType(
+    playerType: string,
+    code: string,
+    body: Partial<Omit<Room, 'roomId'>>,
+  ) {
+    this.RoomModel.updateOne(
+      { playerType, code },
+      {
+        ...body,
+      },
+      { new: true, runValidators: true },
+    );
+  }
+
   get(roomId: string) {
     return this.RoomModel.findOne({ roomId });
   }
