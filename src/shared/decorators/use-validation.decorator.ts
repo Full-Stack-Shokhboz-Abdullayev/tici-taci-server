@@ -20,6 +20,7 @@ export const UseValidation = (): ClassDecorator =>
           return new WsException({
             message: 'Validation Error!',
             errors,
+            error: true,
           });
         },
       }),
