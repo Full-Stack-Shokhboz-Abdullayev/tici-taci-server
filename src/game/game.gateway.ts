@@ -138,10 +138,6 @@ export class GameGateway implements OnGatewayDisconnect {
 
     client.broadcast.to(code).emit('move-complete', result);
 
-    await new Promise((resolve) => {
-      setTimeout(() => resolve('cool'), 1000);
-    });
-
     return {
       event: 'move-complete',
       data: result,
