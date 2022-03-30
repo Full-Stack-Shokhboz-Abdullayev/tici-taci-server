@@ -96,7 +96,10 @@ export class GameGateway implements OnGatewayDisconnect {
     });
 
     client.join(game.code);
-    this.roomService.set(client.id, { code: game.code, playerType: 'joiner' });
+    await this.roomService.set(client.id, {
+      code: game.code,
+      playerType: 'joiner',
+    });
 
     client.broadcast.to(game.code).emit('player-joined', game);
 
@@ -152,27 +155,34 @@ export class GameGateway implements OnGatewayDisconnect {
 
   async handleDisconnect(client: Socket) {
     const playerRoom = await this.roomService.get(client.id);
-    if (playerRoom.playerType === 'joiner') {
+    console.log(client.id);
+
+    if (playerRoom?.playerType === 'joiner') {
       const game = await this.gameService.update({
         code: playerRoom.code,
         joiner: null,
       });
       client.broadcast.to(game.code).emit('opponent-left', game);
-    } else if (playerRoom.playerType === 'maker') {
+    } else if (playerRoom?.playerType === 'maker') {
       const game = await this.gameService.findOne({
         code: playerRoom.code,
       });
       if (!game.joiner) {
         await game.remove();
       } else if (game.joiner) {
-        const updatedGame = await this.gameService.update({
-          code: game.code,
-          maker: game.joiner,
-          joiner: null,
-        });
+        const [updatedGame] = await Promise.all([
+          this.gameService.update({
+            code: game.code,
+            maker: game.joiner,
+            joiner: null,
+          }),
+          this.roomService.set(client.id, {
+            playerType: 'maker',
+          }),
+        ]);
         client.broadcast.to(game.code).emit('opponent-left', updatedGame);
       }
     }
-    this.roomService.delete(client.id);
+    await this.roomService.delete(client.id);
   }
 }

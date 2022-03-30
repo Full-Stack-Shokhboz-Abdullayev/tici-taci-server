@@ -7,13 +7,12 @@ import { Room, RoomDocument } from './entities/room.entity';
 export class RoomService {
   constructor(@InjectModel('Room') private RoomModel: Model<RoomDocument>) {}
 
-  set(roomId: string, body: Omit<Room, 'roomId'>) {
-    const room = new this.RoomModel({
-      roomId,
-      ...body,
-    });
-
-    return room.save();
+  set(roomId: string, body: Partial<Omit<Room, 'roomId'>>) {
+    return this.RoomModel.updateOne(
+      { roomId },
+      { roomId, ...body },
+      { upsert: true },
+    );
   }
   get(roomId: string) {
     return this.RoomModel.findOne({ roomId });
