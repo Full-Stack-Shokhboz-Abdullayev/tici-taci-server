@@ -16,3 +16,5 @@ export class Room {
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);
+
+RoomSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
