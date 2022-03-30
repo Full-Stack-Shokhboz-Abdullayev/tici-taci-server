@@ -16,9 +16,8 @@ import { JoinGameDto } from './dto/join-game.dto';
 import { GameDocument } from './entities/game.entity';
 import calculateWinner from './game.logic';
 import { GameService } from './game.service';
+import { RoomService } from './room.service';
 import { SignEnum } from './typings/enums/sign.enum';
-
-type Rooms = Map<Socket, { code: string; playerType: 'maker' | 'joiner' }>;
 
 @UseValidation()
 @WebSocketGateway({
@@ -27,12 +26,13 @@ type Rooms = Map<Socket, { code: string; playerType: 'maker' | 'joiner' }>;
   },
 })
 export class GameGateway implements OnGatewayDisconnect {
-  constructor(@Inject(GameService) private gameService: GameService) {}
+  constructor(
+    @Inject(GameService) private gameService: GameService,
+    @Inject(RoomService) private roomService: RoomService,
+  ) {}
 
   @WebSocketServer()
   server: Server;
-
-  rooms: Rooms = new Map();
 
   @SubscribeMessage('check')
   async check(
@@ -54,7 +54,11 @@ export class GameGateway implements OnGatewayDisconnect {
     const game = await this.gameService.create(data);
 
     client.join(game.code);
-    this.rooms.set(client, { code: game.code, playerType: 'maker' });
+    await this.roomService.set(client.id, {
+      code: game.code,
+      playerType: 'maker',
+    });
+
     return {
       event: 'create-complete',
       data: game,
@@ -92,7 +96,7 @@ export class GameGateway implements OnGatewayDisconnect {
     });
 
     client.join(game.code);
-    this.rooms.set(client, { code: game.code, playerType: 'joiner' });
+    this.roomService.set(client.id, { code: game.code, playerType: 'joiner' });
 
     client.broadcast.to(game.code).emit('player-joined', game);
 
@@ -131,7 +135,9 @@ export class GameGateway implements OnGatewayDisconnect {
 
     client.broadcast.to(code).emit('move-complete', result);
 
-    console.log(this.rooms.values());
+    await new Promise((resolve) => {
+      setTimeout(() => resolve('cool'), 1000);
+    });
 
     return {
       event: 'move-complete',
@@ -141,13 +147,11 @@ export class GameGateway implements OnGatewayDisconnect {
 
   @SubscribeMessage('restart')
   async restart(@MessageBody() { code }, @ConnectedSocket() client: Socket) {
-    console.log(code, '\n', client.id);
-
     client.broadcast.to(code).emit('restart-made');
   }
 
   async handleDisconnect(client: Socket) {
-    const playerRoom = this.rooms.get(client);
+    const playerRoom = await this.roomService.get(client.id);
     if (playerRoom.playerType === 'joiner') {
       const game = await this.gameService.update({
         code: playerRoom.code,
@@ -169,6 +173,6 @@ export class GameGateway implements OnGatewayDisconnect {
         client.broadcast.to(game.code).emit('opponent-left', updatedGame);
       }
     }
-    this.rooms.delete(client);
+    this.roomService.delete(client.id);
   }
 }
