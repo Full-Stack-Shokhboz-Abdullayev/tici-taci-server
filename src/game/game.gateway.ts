@@ -129,10 +129,29 @@ export class GameGateway implements OnGatewayDisconnect {
       line: { line },
     } = calculateWinner(cells);
 
+    let game = await this.gameService.findOne({ code });
+
+    if (winner && winner !== 'tie') {
+      const winnerType = game.maker.sign === winner ? 'maker' : 'joiner';
+      game = await this.gameService.updateScore({
+        code,
+        winnerType,
+      });
+    }
+
+    let scores: { [key: string]: number } = {};
+    if (game.maker.name && game.joiner.name) {
+      scores = {
+        [game.maker.name]: game.maker.score,
+        [game.joiner.name]: game.joiner.score,
+      };
+    }
+
     const result = {
       winner,
       line: winner && winner !== 'tie' ? line : {},
       cells,
+      scores,
       xIsNext: !xIsNext,
     };
 
@@ -151,25 +170,24 @@ export class GameGateway implements OnGatewayDisconnect {
 
   async handleDisconnect(client: Socket) {
     const playerRoom = await this.roomService.get(client.id);
-    console.log(client.id);
 
     if (playerRoom?.playerType === 'joiner') {
       const game = await this.gameService.update({
         code: playerRoom.code,
         joiner: null,
       });
-      client.broadcast.to(game.code).emit('opponent-left', game);
+      if (game?.code) {
+        client.broadcast.to(game.code).emit('opponent-left', game);
+      }
     } else if (playerRoom?.playerType === 'maker') {
       const game = await this.gameService.findOne({
         code: playerRoom.code,
       });
-      if (!game.joiner) {
-        await game.remove();
-      } else if (game.joiner) {
+      if (game?.joiner) {
         const [updatedGame] = await Promise.all([
           this.gameService.update({
             code: game.code,
-            maker: game.joiner,
+            maker: { name: game.joiner.name, sign: game.joiner.sign, score: 0 },
             joiner: null,
           }),
           this.roomService.updateByPlayerType('joiner', game.code, {
@@ -177,6 +195,8 @@ export class GameGateway implements OnGatewayDisconnect {
           }),
         ]);
         client.broadcast.to(game.code).emit('opponent-left', updatedGame);
+      } else {
+        await game?.remove();
       }
     }
     await this.roomService.delete(client.id);

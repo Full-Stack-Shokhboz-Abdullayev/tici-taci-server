@@ -45,6 +45,27 @@ export class GameService {
     });
   }
 
+  async updateScore({
+    code,
+    winnerType,
+  }: {
+    code: string;
+    winnerType: string;
+  }) {
+    return this.GameModel.findOneAndUpdate(
+      { code },
+      {
+        $inc: {
+          [`${winnerType}.score`]: 1,
+        },
+      },
+      {
+        runValidators: true,
+        new: true,
+      },
+    );
+  }
+
   delete({ code }: Partial<JoinGameDto>) {
     return this.GameModel.findOneAndRemove({ code });
   }

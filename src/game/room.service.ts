@@ -37,10 +37,10 @@ export class RoomService {
     code: string,
     body: Partial<Omit<Room, 'roomId'>>,
   ) {
-    this.RoomModel.updateOne(
+    return this.RoomModel.updateOne(
       { playerType, code },
       {
-        ...body,
+        playerType: body.playerType,
       },
       { new: true, runValidators: true },
     );
