@@ -16,9 +16,8 @@ import { JoinGameDto } from './dto/join-game.dto';
 import { GameDocument } from './entities/game.entity';
 import calculateWinner from './game.logic';
 import { GameService } from './game.service';
+import { RoomService } from './room.service';
 import { SignEnum } from './typings/enums/sign.enum';
-
-type Rooms = Map<Socket, { code: string; playerType: 'maker' | 'joiner' }>;
 
 @UseValidation()
 @WebSocketGateway({
@@ -27,12 +26,13 @@ type Rooms = Map<Socket, { code: string; playerType: 'maker' | 'joiner' }>;
   },
 })
 export class GameGateway implements OnGatewayDisconnect {
-  constructor(@Inject(GameService) private gameService: GameService) {}
+  constructor(
+    @Inject(GameService) private gameService: GameService,
+    @Inject(RoomService) private roomService: RoomService,
+  ) {}
 
   @WebSocketServer()
   server: Server;
-
-  rooms: Rooms = new Map();
 
   @SubscribeMessage('check')
   async check(
@@ -54,7 +54,11 @@ export class GameGateway implements OnGatewayDisconnect {
     const game = await this.gameService.create(data);
 
     client.join(game.code);
-    this.rooms.set(client, { code: game.code, playerType: 'maker' });
+    await this.roomService.set(client.id, {
+      code: game.code,
+      playerType: 'maker',
+    });
+
     return {
       event: 'create-complete',
       data: game,
@@ -92,7 +96,10 @@ export class GameGateway implements OnGatewayDisconnect {
     });
 
     client.join(game.code);
-    this.rooms.set(client, { code: game.code, playerType: 'joiner' });
+    await this.roomService.set(client.id, {
+      code: game.code,
+      playerType: 'joiner',
+    });
 
     client.broadcast.to(game.code).emit('player-joined', game);
 
@@ -122,16 +129,33 @@ export class GameGateway implements OnGatewayDisconnect {
       line: { line },
     } = calculateWinner(cells);
 
+    let game = await this.gameService.findOne({ code });
+
+    if (winner && winner !== 'tie') {
+      const winnerType = game.maker.sign === winner ? 'maker' : 'joiner';
+      game = await this.gameService.updateScore({
+        code,
+        winnerType,
+      });
+    }
+
+    let scores: { [key: string]: number } = {};
+    if (game.maker.name && game.joiner.name) {
+      scores = {
+        [game.maker.name]: game.maker.score,
+        [game.joiner.name]: game.joiner.score,
+      };
+    }
+
     const result = {
       winner,
       line: winner && winner !== 'tie' ? line : {},
       cells,
+      scores,
       xIsNext: !xIsNext,
     };
 
     client.broadcast.to(code).emit('move-complete', result);
-
-    console.log(this.rooms.values());
 
     return {
       event: 'move-complete',
@@ -141,34 +165,40 @@ export class GameGateway implements OnGatewayDisconnect {
 
   @SubscribeMessage('restart')
   async restart(@MessageBody() { code }, @ConnectedSocket() client: Socket) {
-    console.log(code, '\n', client.id);
-
     client.broadcast.to(code).emit('restart-made');
   }
 
   async handleDisconnect(client: Socket) {
-    const playerRoom = this.rooms.get(client);
-    if (playerRoom.playerType === 'joiner') {
+    const playerRoom = await this.roomService.get(client.id);
+
+    if (playerRoom?.playerType === 'joiner') {
       const game = await this.gameService.update({
         code: playerRoom.code,
         joiner: null,
       });
-      client.broadcast.to(game.code).emit('opponent-left', game);
-    } else if (playerRoom.playerType === 'maker') {
+      if (game?.code) {
+        client.broadcast.to(game.code).emit('opponent-left', game);
+      }
+    } else if (playerRoom?.playerType === 'maker') {
       const game = await this.gameService.findOne({
         code: playerRoom.code,
       });
-      if (!game.joiner) {
-        await game.remove();
-      } else if (game.joiner) {
-        const updatedGame = await this.gameService.update({
-          code: game.code,
-          maker: game.joiner,
-          joiner: null,
-        });
+      if (game?.joiner) {
+        const [updatedGame] = await Promise.all([
+          this.gameService.update({
+            code: game.code,
+            maker: { name: game.joiner.name, sign: game.joiner.sign, score: 0 },
+            joiner: null,
+          }),
+          this.roomService.updateByPlayerType('joiner', game.code, {
+            playerType: 'maker',
+          }),
+        ]);
         client.broadcast.to(game.code).emit('opponent-left', updatedGame);
+      } else {
+        await game?.remove();
       }
     }
-    this.rooms.delete(client);
+    await this.roomService.delete(client.id);
   }
 }

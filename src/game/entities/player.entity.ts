@@ -11,6 +11,9 @@ class Player {
 
   @Prop({ required: true })
   sign: SignEnum;
+
+  @Prop({ default: 0 })
+  score: number;
 }
 
 export const PlayerSchema = SchemaFactory.createForClass(Player);
