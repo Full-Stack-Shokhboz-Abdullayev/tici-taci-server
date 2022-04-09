@@ -140,7 +140,7 @@ export class GameGateway implements OnGatewayDisconnect {
     }
 
     let scores: { [key: string]: number } = {};
-    if (game.maker.name && game.joiner.name) {
+    if (game?.maker?.name && game?.joiner?.name) {
       scores = {
         [game.maker.name]: game.maker.score,
         [game.joiner.name]: game.joiner.score,
@@ -170,35 +170,45 @@ export class GameGateway implements OnGatewayDisconnect {
 
   async handleDisconnect(client: Socket) {
     const playerRoom = await this.roomService.get(client.id);
-
-    if (playerRoom?.playerType === 'joiner') {
-      const game = await this.gameService.update({
-        code: playerRoom.code,
-        joiner: null,
-      });
-      if (game?.code) {
-        client.broadcast.to(game.code).emit('opponent-left', game);
-      }
-    } else if (playerRoom?.playerType === 'maker') {
+    if (playerRoom) {
       const game = await this.gameService.findOne({
         code: playerRoom.code,
       });
-      if (game?.joiner) {
-        const [updatedGame] = await Promise.all([
-          this.gameService.update({
-            code: game.code,
-            maker: { name: game.joiner.name, sign: game.joiner.sign, score: 0 },
+      if (game) {
+        if (playerRoom?.playerType === 'joiner') {
+          const updatedGame = await this.gameService.update({
+            code: playerRoom.code,
+            maker: { name: game.maker.name, sign: game.maker.sign, score: 0 },
             joiner: null,
-          }),
-          this.roomService.updateByPlayerType('joiner', game.code, {
-            playerType: 'maker',
-          }),
-        ]);
-        client.broadcast.to(game.code).emit('opponent-left', updatedGame);
-      } else {
-        await game?.remove();
+          });
+          if (updatedGame?.code) {
+            client.broadcast
+              .to(updatedGame.code)
+              .emit('opponent-left', updatedGame);
+          }
+        } else if (playerRoom?.playerType === 'maker') {
+          if (game?.joiner) {
+            const [updatedGame] = await Promise.all([
+              this.gameService.update({
+                code: game.code,
+                maker: {
+                  name: game.joiner.name,
+                  sign: game.joiner.sign,
+                  score: 0,
+                },
+                joiner: null,
+              }),
+              this.roomService.updateByPlayerType('joiner', game.code, {
+                playerType: 'maker',
+              }),
+            ]);
+            client.broadcast.to(game.code).emit('opponent-left', updatedGame);
+          } else {
+            await game?.remove();
+          }
+        }
       }
+      await this.roomService.delete(client.id);
     }
-    await this.roomService.delete(client.id);
   }
 }
