@@ -22,6 +22,22 @@ export class GameService {
     private configService: ConfigService<EnvironmentVariables>,
   ) {}
 
+  toggleFlip(code: string) {
+    return this.GameModel.findOneAndUpdate(
+      { code },
+      [
+        {
+          $set: {
+            flip: {
+              $not: '$flip',
+            },
+          },
+        },
+      ],
+      { new: true },
+    );
+  }
+
   create(body: CreateGameDto) {
     const game = new this.GameModel({
       ...body,

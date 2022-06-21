@@ -27,8 +27,6 @@ export class GameGateway implements OnGatewayDisconnect {
     @Inject(RoomService) private roomService: RoomService,
   ) {}
 
-  flip = true;
-
   @WebSocketServer()
   server: Server;
 
@@ -164,14 +162,14 @@ export class GameGateway implements OnGatewayDisconnect {
 
   @SubscribeMessage('restart')
   async restart(@MessageBody() { code }, @ConnectedSocket() client: Socket) {
-    this.flip = !this.flip;
+    const { flip } = await this.gameService.toggleFlip(code);
     client.broadcast.to(code).emit('restart-made', {
-      xIsNext: this.flip,
+      xIsNext: flip,
     });
     return {
       event: 'restart-made',
       data: {
-        xIsNext: this.flip,
+        xIsNext: flip,
       },
     };
   }

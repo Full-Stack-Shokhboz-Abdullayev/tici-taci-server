@@ -15,6 +15,9 @@ export class Game {
   @Prop({ required: true })
   expireAt: Date;
 
+  @Prop({ default: true })
+  flip: boolean;
+
   @Prop({ type: PlayerSchema })
   maker: PlayerDocument;
 
