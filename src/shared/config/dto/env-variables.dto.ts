@@ -6,7 +6,6 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-// import { MONGO_URI_PATTERN } from '../constants/regexs';
 import { Environment } from '../typings/enums/env.enum';
 
 export class EnvironmentVariables {
@@ -25,4 +24,10 @@ export class EnvironmentVariables {
 
   @IsNumber()
   GAME_DURATION: number;
+
+  @IsString()
+  WS_ORIGIN: string;
+
+  @IsString()
+  SITE_ORIGIN: string;
 }

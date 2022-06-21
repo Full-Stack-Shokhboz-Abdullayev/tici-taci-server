@@ -20,16 +20,14 @@ import { RoomService } from './room.service';
 import { SignEnum } from './typings/enums/sign.enum';
 
 @UseValidation()
-@WebSocketGateway({
-  cors: {
-    origin: '*',
-  },
-})
+@WebSocketGateway()
 export class GameGateway implements OnGatewayDisconnect {
   constructor(
     @Inject(GameService) private gameService: GameService,
     @Inject(RoomService) private roomService: RoomService,
   ) {}
+
+  flip = true;
 
   @WebSocketServer()
   server: Server;
@@ -140,6 +138,7 @@ export class GameGateway implements OnGatewayDisconnect {
     }
 
     let scores: { [key: string]: number } = {};
+
     if (game?.maker?.name && game?.joiner?.name) {
       scores = {
         [game.maker.name]: game.maker.score,
@@ -165,7 +164,16 @@ export class GameGateway implements OnGatewayDisconnect {
 
   @SubscribeMessage('restart')
   async restart(@MessageBody() { code }, @ConnectedSocket() client: Socket) {
-    client.broadcast.to(code).emit('restart-made');
+    this.flip = !this.flip;
+    client.broadcast.to(code).emit('restart-made', {
+      xIsNext: this.flip,
+    });
+    return {
+      event: 'restart-made',
+      data: {
+        xIsNext: this.flip,
+      },
+    };
   }
 
   async handleDisconnect(client: Socket) {
