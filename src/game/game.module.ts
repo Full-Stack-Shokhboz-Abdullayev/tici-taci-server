@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { GameSchema } from './entities/game.entity';
 import { RoomSchema } from './entities/room.entity';
-import { GameController } from './game.controller';
 import { GameGateway } from './game.gateway';
 import { GameService } from './game.service';
 import { RoomService } from './room.service';
@@ -20,7 +19,6 @@ import { RoomService } from './room.service';
       },
     ]),
   ],
-  controllers: [GameController],
   providers: [GameService, GameGateway, RoomService],
 })
 export class GameModule {}

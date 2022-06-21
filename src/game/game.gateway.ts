@@ -31,11 +31,15 @@ export class GameGateway implements OnGatewayDisconnect {
   server: Server;
 
   @SubscribeMessage('check')
-  async check(
-    @MessageBody() { code }: { code: string },
-  ): Promise<WsResponse<GameDocument>> {
+  async check(@MessageBody() { code }: { code: string }) {
     const game = await this.gameService.findOne({ code });
-
+    if (!game) {
+      throw new WsException({
+        messages: {
+          code: 'Game not found!',
+        },
+      });
+    }
     return {
       event: 'check-complete',
       data: game,
@@ -67,12 +71,6 @@ export class GameGateway implements OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     const { data } = await this.check({ code });
-
-    if (!data) {
-      throw new WsException({
-        message: 'Game not found!',
-      });
-    }
 
     const socketsSize = (await client.in(code).allSockets()).size;
 
